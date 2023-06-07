@@ -2,7 +2,8 @@ import DraftLog from 'draftlog';
 import { GPT4All } from 'gpt4all';
 
 import { spawn } from 'node:child_process';
-import { extname, resolve } from 'node:path';
+import { createWriteStream } from 'node:fs';
+import { extname, join, resolve } from 'node:path';
 import { cwd, exit } from 'node:process';
 import { compose } from 'node:stream';
 
@@ -66,28 +67,29 @@ await gpt4all.init();
 
 await gpt4all.open();
 
-const response = await gpt4all.proompt(
-  'What would a function in rust look like to fetch a passed in number of pokemon from the pokeapi?'
-);
-
-const summarizor = compose(async (source: AsyncIterable<string>) => {
+const summarizor = compose(async function* (source: AsyncIterable<string>) {
   let paragraph: string[] = [];
   for await (const line of source) {
     paragraph.push(line);
     if (paragraph.length < 5) continue;
     const proompt =
-      'Can you summarize the following conversation in about half as many characters? Please leave in all the details so that none of the content is lost, but simply make it more concise' +
-      paragraph.join('');
+      '### Instruction: The prompt below is a transcript of a podcast. Write an appropriate summarization to reduce the total length without leaving out details.\n### Prompt:"' +
+      paragraph.join('\n') +
+      '"\n### Response:';
     paragraph = [];
-    console.log('Proompting:');
-    console.log(proompt);
-    console.log('');
     const response = await gpt4all.proompt(proompt);
-    console.log('Response');
-    console.log(response);
-    console.log('\n');
+    console.log(proompt, '\n');
+    console.log(response, '\n');
+    yield JSON.stringify(
+      {
+        proompt,
+        response,
+      },
+      null,
+      2
+    );
   }
-});
+}, createWriteStream(join(CWD, 'summary.json')));
 const transcriptRegex = /\[\d+:\d+\.\d+ --> \d+:\d+\.\d+]\s+([^\n]+)/gm;
 const whisper = spawn('whisper', [source], {
   stdio: ['ignore', 'pipe', 'ignore'],
